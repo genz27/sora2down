@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理后台 - Sora Studio Pro</title>
+    <style>
+        :root {
+            --bg-body: #0a0a0c;
+            --surface-1: #131316;
+            --surface-2: #1c1c21;
+            --border-color: #2d2d35;
+            --primary: #5c6cff;
+            --primary-hover: #4b5be0;
+            --text-main: #ededed;
+            --text-muted: #858595;
+            --success: #2ecc71;
+            --error: #e74c3c;
+            --warning: #f39c12;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: var(--bg-body);
+            color: var(--text-main);
+            font-family: 'Inter', system-ui, sans-serif;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .backdrop {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle at 50% -20%, #1a1f3c 0%, #0a0a0c 60%);
+            z-index: -1;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding-bottom: 20px; border-bottom: 1px solid var(--border-color); margin-bottom: 30px;
+        }
+        .header h1 { font-size: 1.5rem; }
+        .header h1 span { color: var(--primary); }
+        .header-actions { display: flex; gap: 12px; }
+        .btn {
+            padding: 10px 20px; border-radius: 8px; font-size: 0.9rem;
+            cursor: pointer; transition: 0.2s; border: none; font-weight: 500;
+        }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-primary:hover { background: var(--primary-hover); }
+        .btn-outline { background: transparent; color: var(--text-main); border: 1px solid var(--border-color); }
+        .btn-outline:hover { background: rgba(255,255,255,0.05); }
+        .btn-danger { background: var(--error); color: #fff; }
+        .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
+
+        .tabs { display: flex; gap: 8px; margin-bottom: 24px; }
+        .tab {
+            padding: 10px 24px; background: var(--surface-1); border: 1px solid var(--border-color);
+            border-radius: 8px; color: var(--text-muted); cursor: pointer; transition: 0.2s;
+        }
+        .tab:hover { color: var(--text-main); }
+        .tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+        .panel { display: none; }
+        .panel.active { display: block; }
+
+        .card {
+            background: var(--surface-1); border: 1px solid var(--border-color);
+            border-radius: 12px; padding: 24px; margin-bottom: 20px;
+        }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .card-title { font-size: 1.1rem; font-weight: 600; }
+
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border-color); }
+        th { color: var(--text-muted); font-weight: 500; font-size: 0.85rem; }
+        td { font-size: 0.9rem; }
+        tr:hover { background: rgba(255,255,255,0.02); }
+
+        .status-badge {
+            display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 500;
+        }
+        .status-enabled { background: rgba(46,204,113,0.15); color: var(--success); }
+        .status-disabled { background: rgba(231,76,60,0.15); color: var(--error); }
+
+        .token-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: monospace; font-size: 0.8rem; color: var(--text-muted); }
+
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .stat-card { background: var(--surface-2); border: 1px solid var(--border-color); border-radius: 10px; padding: 20px; }
+        .stat-value { font-size: 2rem; font-weight: 700; color: var(--primary); }
+        .stat-label { font-size: 0.85rem; color: var(--text-muted); margin-top: 4px; }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 1000;
+        }
+        .modal-overlay.show { display: flex; }
+        .modal {
+            background: var(--surface-1); border: 1px solid var(--border-color);
+            border-radius: 16px; padding: 30px; width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto;
+        }
+        .modal h2 { margin-bottom: 24px; font-size: 1.2rem; }
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px; }
+        .form-group input, .form-group textarea {
+            width: 100%; padding: 12px; background: var(--bg-body); border: 1px solid var(--border-color);
+            border-radius: 8px; color: #fff; font-size: 14px; outline: none;
+        }
+        .form-group input:focus, .form-group textarea:focus { border-color: var(--primary); }
+        .form-group textarea { min-height: 80px; resize: vertical; font-family: monospace; }
+        .modal-actions { display: flex; gap: 12px; margin-top: 24px; }
+        .modal-actions .btn { flex: 1; }
+
+        .empty-state { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+        .empty-state p { margin-bottom: 20px; }
+
+        .action-btns { display: flex; gap: 8px; }
+    </style>
+</head>
+<body>
+    <div class="backdrop"></div>
+    <div class="container">
+        <div class="header">
+            <h1>Sora Studio <span>Pro</span> 管理后台</h1>
+            <div class="header-actions">
+                <a href="/" class="btn btn-outline">返回首页</a>
+                <a href="/logout" class="btn btn-outline">退出登录</a>
+            </div>
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="statAccounts">0</div>
+                <div class="stat-label">Sora 账号</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statProxies">0</div>
+                <div class="stat-label">代理节点</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statRequests">0</div>
+                <div class="stat-label">总请求数</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statSuccess">0%</div>
+                <div class="stat-label">成功率</div>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" data-tab="accounts">账号管理</div>
+            <div class="tab" data-tab="proxies">代理池</div>
+            <div class="tab" data-tab="logs">请求日志</div>
+        </div>
+
+        <!-- 账号管理 -->
+        <div class="panel active" id="panel-accounts">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Sora 账号列表</span>
+                    <button class="btn btn-primary btn-sm" onclick="showAddAccountModal()">+ 添加账号</button>
+                </div>
+                <div id="accountsTable"></div>
+            </div>
+        </div>
+
+        <!-- 代理池 -->
+        <div class="panel" id="panel-proxies">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">代理池</span>
+                    <button class="btn btn-primary btn-sm" onclick="showAddProxyModal()">+ 添加代理</button>
+                </div>
+                <div id="proxiesTable"></div>
+            </div>
+        </div>
+
+        <!-- 请求日志 -->
+        <div class="panel" id="panel-logs">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">最近请求日志</span>
+                    <button class="btn btn-outline btn-sm" onclick="loadLogs()">刷新</button>
+                </div>
+                <div id="logsTable"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加账号弹窗 -->
+    <div class="modal-overlay" id="accountModal">
+        <div class="modal">
+            <h2 id="accountModalTitle">添加 Sora 账号</h2>
+            <input type="hidden" id="editAccountId">
+            <div class="form-group">
+                <label>账号名称</label>
+                <input type="text" id="accountName" placeholder="例如: 主账号">
+            </div>
+            <div class="form-group">
+                <label>Access Token</label>
+                <textarea id="accountAccessToken" placeholder="Bearer token..."></textarea>
+            </div>
+            <div class="form-group">
+                <label>Refresh Token</label>
+                <textarea id="accountRefreshToken" placeholder="Refresh token..."></textarea>
+            </div>
+            <div class="form-group">
+                <label>Client ID (可选)</label>
+                <input type="text" id="accountClientId" placeholder="默认: app_OHnYmJt5u1XEdhDUx0ig1ziv">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="closeModal('accountModal')">取消</button>
+                <button class="btn btn-primary" onclick="saveAccount()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加代理弹窗 -->
+    <div class="modal-overlay" id="proxyModal">
+        <div class="modal">
+            <h2>添加代理</h2>
+            <div class="form-group">
+                <label>代理地址 (每行一个)</label>
+                <textarea id="proxyUrls" placeholder="http://127.0.0.1:7890&#10;http://user:pass@proxy.com:8080&#10;socks5://127.0.0.1:1080" style="min-height:150px;"></textarea>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="closeModal('proxyModal')">取消</button>
+                <button class="btn btn-primary" onclick="saveProxies()">添加</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Tab切换
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+            });
+        });
+
+        function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+        // ========== 账号管理 ==========
+        function showAddAccountModal() {
+            document.getElementById('accountModalTitle').textContent = '添加 Sora 账号';
+            document.getElementById('editAccountId').value = '';
+            document.getElementById('accountName').value = '';
+            document.getElementById('accountAccessToken').value = '';
+            document.getElementById('accountRefreshToken').value = '';
+            document.getElementById('accountClientId').value = '';
+            document.getElementById('accountModal').classList.add('show');
+        }
+
+        function editAccount(id) {
+            fetch('/api/accounts/' + id).then(r => r.json()).then(acc => {
+                document.getElementById('accountModalTitle').textContent = '编辑账号';
+                document.getElementById('editAccountId').value = id;
+                document.getElementById('accountName').value = acc.name;
+                document.getElementById('accountAccessToken').value = acc.access_token || '';
+                document.getElementById('accountRefreshToken').value = acc.refresh_token || '';
+                document.getElementById('accountClientId').value = acc.client_id || '';
+                document.getElementById('accountModal').classList.add('show');
+            });
+        }
+
+        function saveAccount() {
+            const id = document.getElementById('editAccountId').value;
+            const data = {
+                name: document.getElementById('accountName').value,
+                access_token: document.getElementById('accountAccessToken').value,
+                refresh_token: document.getElementById('accountRefreshToken').value,
+                client_id: document.getElementById('accountClientId').value
+            };
+            const url = id ? '/api/accounts/' + id : '/api/accounts';
+            const method = id ? 'PUT' : 'POST';
+            fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) })
+                .then(r => r.json()).then(() => { closeModal('accountModal'); loadAccounts(); });
+        }
+
+        function toggleAccount(id, enabled) {
+            fetch('/api/accounts/' + id, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ enabled: enabled ? 0 : 1 })
+            }).then(() => loadAccounts());
+        }
+
+        function deleteAccount(id) {
+            if (confirm('确定删除此账号？')) {
+                fetch('/api/accounts/' + id, { method: 'DELETE' }).then(() => loadAccounts());
+            }
+        }
+
+        function loadAccounts() {
+            fetch('/api/accounts').then(r => r.json()).then(accounts => {
+                document.getElementById('statAccounts').textContent = accounts.length;
+                if (accounts.length === 0) {
+                    document.getElementById('accountsTable').innerHTML = '<div class="empty-state"><p>暂无账号</p><button class="btn btn-primary" onclick="showAddAccountModal()">添加第一个账号</button></div>';
+                    return;
+                }
+                let html = '<table><thead><tr><th>名称</th><th>Access Token</th><th>Refresh Token</th><th>请求/错误</th><th>状态</th><th>操作</th></tr></thead><tbody>';
+                accounts.forEach(a => {
+                    html += `<tr>
+                        <td>${a.name}</td>
+                        <td class="token-cell">${a.access_token ? a.access_token.substring(0,30)+'...' : '-'}</td>
+                        <td class="token-cell">${a.refresh_token ? a.refresh_token.substring(0,30)+'...' : '-'}</td>
+                        <td>${a.request_count} / ${a.error_count}</td>
+                        <td><span class="status-badge ${a.enabled ? 'status-enabled' : 'status-disabled'}">${a.enabled ? '启用' : '禁用'}</span></td>
+                        <td class="action-btns">
+                            <button class="btn btn-outline btn-sm" onclick="editAccount(${a.id})">编辑</button>
+                            <button class="btn btn-outline btn-sm" onclick="toggleAccount(${a.id}, ${a.enabled})">${a.enabled ? '禁用' : '启用'}</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteAccount(${a.id})">删除</button>
+                        </td>
+                    </tr>`;
+                });
+                html += '</tbody></table>';
+                document.getElementById('accountsTable').innerHTML = html;
+            });
+        }
+
+        // ========== 代理管理 ==========
+        function showAddProxyModal() {
+            document.getElementById('proxyUrls').value = '';
+            document.getElementById('proxyModal').classList.add('show');
+        }
+
+        function saveProxies() {
+            const urls = document.getElementById('proxyUrls').value.split('\n').map(u => u.trim()).filter(u => u);
+            Promise.all(urls.map(url => 
+                fetch('/api/proxies', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ proxy_url: url }) })
+            )).then(() => { closeModal('proxyModal'); loadProxies(); });
+        }
+
+        function toggleProxy(id, enabled) {
+            fetch('/api/proxies/' + id, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ enabled: enabled ? 0 : 1 })
+            }).then(() => loadProxies());
+        }
+
+        function deleteProxy(id) {
+            if (confirm('确定删除此代理？')) {
+                fetch('/api/proxies/' + id, { method: 'DELETE' }).then(() => loadProxies());
+            }
+        }
+
+        function loadProxies() {
+            fetch('/api/proxies').then(r => r.json()).then(proxies => {
+                document.getElementById('statProxies').textContent = proxies.length;
+                if (proxies.length === 0) {
+                    document.getElementById('proxiesTable').innerHTML = '<div class="empty-state"><p>暂无代理</p><button class="btn btn-primary" onclick="showAddProxyModal()">添加代理</button></div>';
+                    return;
+                }
+                let html = '<table><thead><tr><th>代理地址</th><th>成功/失败</th><th>最后使用</th><th>状态</th><th>操作</th></tr></thead><tbody>';
+                proxies.forEach(p => {
+                    html += `<tr>
+                        <td style="font-family:monospace;font-size:0.85rem;">${p.proxy_url}</td>
+                        <td>${p.success_count} / ${p.fail_count}</td>
+                        <td style="font-size:0.8rem;color:var(--text-muted);">${p.last_used_at || '-'}</td>
+                        <td><span class="status-badge ${p.enabled ? 'status-enabled' : 'status-disabled'}">${p.enabled ? '启用' : '禁用'}</span></td>
+                        <td class="action-btns">
+                            <button class="btn btn-outline btn-sm" onclick="toggleProxy(${p.id}, ${p.enabled})">${p.enabled ? '禁用' : '启用'}</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteProxy(${p.id})">删除</button>
+                        </td>
+                    </tr>`;
+                });
+                html += '</tbody></table>';
+                document.getElementById('proxiesTable').innerHTML = html;
+            });
+        }
+
+        // ========== 日志 ==========
+        function loadLogs() {
+            fetch('/api/logs').then(r => r.json()).then(logs => {
+                let total = logs.length;
+                let success = logs.filter(l => l.success).length;
+                document.getElementById('statRequests').textContent = total;
+                document.getElementById('statSuccess').textContent = total > 0 ? Math.round(success/total*100) + '%' : '0%';
+                
+                if (logs.length === 0) {
+                    document.getElementById('logsTable').innerHTML = '<div class="empty-state"><p>暂无日志</p></div>';
+                    return;
+                }
+                let html = '<table><thead><tr><th>时间</th><th>账号</th><th>代理</th><th>视频ID</th><th>状态</th><th>错误</th></tr></thead><tbody>';
+                logs.forEach(l => {
+                    html += `<tr>
+                        <td style="font-size:0.8rem;color:var(--text-muted);">${l.created_at}</td>
+                        <td>${l.account_name || '-'}</td>
+                        <td style="font-size:0.8rem;">${l.proxy_url || '直连'}</td>
+                        <td style="font-family:monospace;font-size:0.8rem;">${l.video_id || '-'}</td>
+                        <td><span class="status-badge ${l.success ? 'status-enabled' : 'status-disabled'}">${l.success ? '成功' : '失败'}</span></td>
+                        <td style="font-size:0.8rem;color:var(--error);">${l.error_msg || '-'}</td>
+                    </tr>`;
+                });
+                html += '</tbody></table>';
+                document.getElementById('logsTable').innerHTML = html;
+            });
+        }
+
+        // 初始化加载
+        loadAccounts();
+        loadProxies();
+        loadLogs();
+    </script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+Flask
+curl-cffi
+gunicorn
+python-dotenv

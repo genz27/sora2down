@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理登录 - Sora Studio Pro</title>
+    <style>
+        :root {
+            --bg-body: #0a0a0c;
+            --surface-1: #131316;
+            --border-color: #2d2d35;
+            --primary: #5c6cff;
+            --primary-hover: #4b5be0;
+            --text-main: #ededed;
+            --text-muted: #858595;
+            --error: #e74c3c;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: var(--bg-body);
+            color: var(--text-main);
+            font-family: 'Inter', system-ui, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .backdrop {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle at 50% -20%, #1a1f3c 0%, #0a0a0c 60%);
+            z-index: -1;
+        }
+        .login-box {
+            background: var(--surface-1);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+        }
+        h1 { font-size: 1.5rem; margin-bottom: 8px; text-align: center; }
+        h1 span { color: var(--primary); }
+        .subtitle { color: var(--text-muted); font-size: 0.85rem; text-align: center; margin-bottom: 30px; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px; }
+        input {
+            width: 100%;
+            padding: 12px 16px;
+            background: var(--bg-body);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        input:focus { border-color: var(--primary); }
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: var(--primary);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .btn:hover { background: var(--primary-hover); }
+        .error-msg {
+            background: rgba(231, 76, 60, 0.1);
+            border: 1px solid var(--error);
+            color: var(--error);
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 0.85rem;
+            text-align: center;
+        }
+        .back-link {
+            display: block;
+            text-align: center;
+            margin-top: 20px;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.85rem;
+        }
+        .back-link:hover { color: var(--primary); }
+    </style>
+</head>
+<body>
+    <div class="backdrop"></div>
+    <div class="login-box">
+        <h1>Sora Studio <span>Pro</span></h1>
+        <p class="subtitle">管理后台登录</p>
+        
+        {% if error %}
+        <div class="error-msg">{{ error }}</div>
+        {% endif %}
+        
+        <form method="POST">
+            <div class="form-group">
+                <label>管理密码</label>
+                <input type="password" name="password" placeholder="请输入管理密码" required autofocus>
+            </div>
+            <button type="submit" class="btn">登 录</button>
+        </form>
+        
+        <a href="/" class="back-link">← 返回首页</a>
+    </div>
+</body>
+</html>
