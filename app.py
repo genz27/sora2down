@@ -21,12 +21,114 @@ account_index = 0
 proxy_index = 0
 index_lock = threading.Lock()
 
-# CF clearance 缓存
-cf_cache = {
-    'cf_clearance': None,
-    'user_agent': None,
-    'expires_at': 0
-}
+
+class CloudflareState:
+    """
+    全局 Cloudflare 状态管理器
+    - cf_clearance cookies 和 user_agent 全局共享
+    - 所有请求自动使用相同凭据，直到遇到新的 429/403
+    - 线程安全
+    """
+    
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._cf_clearance = None
+        self._user_agent = None
+        self._cookies = {}
+        self._expires_at = 0
+        self._is_valid = False
+    
+    @property
+    def cf_clearance(self):
+        with self._lock:
+            return self._cf_clearance
+    
+    @property
+    def user_agent(self):
+        with self._lock:
+            return self._user_agent
+    
+    @property
+    def cookies(self):
+        with self._lock:
+            return self._cookies.copy()
+    
+    @property
+    def is_valid(self):
+        """检查当前凭据是否有效"""
+        with self._lock:
+            if not self._is_valid or not self._cf_clearance:
+                return False
+            if time.time() > self._expires_at:
+                return False
+            return True
+    
+    def update(self, cf_clearance, user_agent, cookies=None, ttl=600):
+        """
+        更新 CF 凭据
+        :param cf_clearance: cf_clearance cookie 值
+        :param user_agent: 对应的 User-Agent
+        :param cookies: 其他 cookies (可选)
+        :param ttl: 有效期秒数，默认 10 分钟
+        """
+        with self._lock:
+            self._cf_clearance = cf_clearance
+            self._user_agent = user_agent
+            self._cookies = cookies or {}
+            if cf_clearance:
+                self._cookies['cf_clearance'] = cf_clearance
+            self._expires_at = time.time() + ttl
+            self._is_valid = True
+            print(f"[CloudflareState] Updated: clearance={cf_clearance[:20] if cf_clearance else None}..., ua={user_agent[:30] if user_agent else None}...")
+    
+    def invalidate(self):
+        """标记当前凭据无效（遇到 429/403 时调用）"""
+        with self._lock:
+            self._is_valid = False
+            print("[CloudflareState] Invalidated due to 429/403")
+    
+    def clear(self):
+        """清除所有凭据"""
+        with self._lock:
+            self._cf_clearance = None
+            self._user_agent = None
+            self._cookies = {}
+            self._expires_at = 0
+            self._is_valid = False
+            print("[CloudflareState] Cleared")
+    
+    def get_request_data(self):
+        """
+        获取请求所需的数据
+        :return: dict with 'user_agent' and 'cookies', or None if invalid
+        """
+        with self._lock:
+            if not self._is_valid or not self._cf_clearance:
+                return None
+            if time.time() > self._expires_at:
+                self._is_valid = False
+                return None
+            return {
+                'user_agent': self._user_agent,
+                'cookies': self._cookies.copy(),
+                'cf_clearance': self._cf_clearance
+            }
+    
+    def get_status(self):
+        """获取当前状态信息"""
+        with self._lock:
+            remaining = max(0, int(self._expires_at - time.time())) if self._is_valid else 0
+            return {
+                'is_valid': self._is_valid and self._cf_clearance is not None,
+                'has_clearance': self._cf_clearance is not None,
+                'user_agent': self._user_agent[:50] + '...' if self._user_agent and len(self._user_agent) > 50 else self._user_agent,
+                'expires_in_seconds': remaining,
+                'cookies_count': len(self._cookies)
+            }
+
+
+# 全局 CF 状态实例
+cf_state = CloudflareState()
 
 
 def get_settings():
@@ -89,11 +191,18 @@ def solve_cf_challenge(proxy=None):
         if response.status_code == 200:
             data = response.json()
             if data.get('success'):
-                return {
+                result = {
                     'cf_clearance': data.get('cf_clearance'),
                     'user_agent': data.get('user_agent'),
                     'cookies': data.get('cookies', {})
                 }
+                # 更新全局状态
+                cf_state.update(
+                    cf_clearance=result['cf_clearance'],
+                    user_agent=result['user_agent'],
+                    cookies=result['cookies']
+                )
+                return result
     except Exception as e:
         print(f"CF Solver error: {e}")
     
@@ -101,22 +210,17 @@ def solve_cf_challenge(proxy=None):
 
 
 def get_cf_clearance(proxy=None, force_refresh=False):
-    """获取 CF clearance，带缓存"""
-    global cf_cache
+    """获取 CF clearance，优先使用全局缓存"""
+    global cf_state
     
-    # 检查缓存是否有效 (缓存 10 分钟)
-    if not force_refresh and cf_cache['cf_clearance'] and time.time() < cf_cache['expires_at']:
-        return cf_cache
+    # 如果不强制刷新且全局状态有效，直接返回
+    if not force_refresh and cf_state.is_valid:
+        return cf_state.get_request_data()
     
     # 获取新的 clearance
     result = solve_cf_challenge(proxy)
     if result:
-        cf_cache = {
-            'cf_clearance': result['cf_clearance'],
-            'user_agent': result['user_agent'],
-            'expires_at': time.time() + 600  # 10 分钟
-        }
-        return cf_cache
+        return cf_state.get_request_data()
     
     return None
 
@@ -151,8 +255,8 @@ def refresh_token(account, proxy=None):
     return data['access_token'], data['refresh_token']
 
 
-def make_sora_api_call(video_id, account, proxy=None, cf_data=None):
-    """执行 Sora API 请求"""
+def make_sora_api_call(video_id, account, proxy=None):
+    """执行 Sora API 请求，自动使用全局 CF 凭据"""
     proxies = {}
     if proxy:
         proxy_url = proxy.get('proxy_url') if isinstance(proxy, dict) else proxy
@@ -161,6 +265,9 @@ def make_sora_api_call(video_id, account, proxy=None, cf_data=None):
     sess = Session(impersonate="chrome110", proxies=proxies)
     api_url = f"https://sora.chatgpt.com/backend/project_y/post/{video_id}"
     
+    # 获取全局 CF 凭据
+    cf_data = cf_state.get_request_data()
+    
     headers = {
         'Accept': 'application/json',
         'Accept-Encoding': 'gzip',
@@ -168,15 +275,16 @@ def make_sora_api_call(video_id, account, proxy=None, cf_data=None):
         'authorization': f'Bearer {account["access_token"]}'
     }
     
-    # 使用 CF clearance 的 User-Agent
+    # 使用全局 CF User-Agent，否则使用默认
     if cf_data and cf_data.get('user_agent'):
         headers['User-Agent'] = cf_data['user_agent']
     else:
         headers['User-Agent'] = 'Sora/1.2025.308'
     
+    # 使用全局 CF cookies
     cookies = {}
-    if cf_data and cf_data.get('cf_clearance'):
-        cookies['cf_clearance'] = cf_data['cf_clearance']
+    if cf_data and cf_data.get('cookies'):
+        cookies = cf_data['cookies']
     
     response = sess.get(api_url, headers=headers, cookies=cookies, timeout=20)
     response.raise_for_status()
@@ -191,16 +299,15 @@ def process_sora_request(video_id, account, proxy, proxy_id):
     retry_on_429 = settings.get('retry_on_429') == '1'
     retry_on_403 = settings.get('retry_on_403') == '1'
     
-    cf_data = None
     last_error = None
+    
+    # 首次请求前，如果启用了 CF Solver 且没有有效凭据，先获取
+    if settings.get('cf_solver_enabled') == '1' and not cf_state.is_valid:
+        get_cf_clearance(proxy, force_refresh=True)
     
     for attempt in range(max_retries + 1):
         try:
-            # 首次尝试或遇到 CF 挑战后获取 clearance
-            if attempt > 0 or settings.get('cf_solver_enabled') == '1':
-                cf_data = get_cf_clearance(proxy, force_refresh=(attempt > 0))
-            
-            response_data = make_sora_api_call(video_id, account, proxy, cf_data)
+            response_data = make_sora_api_call(video_id, account, proxy)
             download_link = response_data['post']['attachments'][0]['encodings']['source']['path']
             return {'success': True, 'download_link': download_link}
             
@@ -210,20 +317,29 @@ def process_sora_request(video_id, account, proxy, proxy_id):
             
             # 429 Too Many Requests
             if status_code == 429 and retry_on_429:
-                print(f"429 encountered, attempt {attempt + 1}/{max_retries + 1}")
+                print(f"[429] attempt {attempt + 1}/{max_retries + 1}")
+                # 标记 CF 凭据无效
+                cf_state.invalidate()
+                
                 if attempt < max_retries:
-                    # 切换代理
+                    # 切换代理并刷新 CF 凭据
                     proxy = get_next_proxy()
                     proxy_id = proxy['id'] if proxy else None
+                    if settings.get('cf_solver_enabled') == '1':
+                        get_cf_clearance(proxy, force_refresh=True)
                     time.sleep(retry_delay * (attempt + 1))
                     continue
             
             # 403 Forbidden (可能是 CF 挑战)
             if status_code == 403 and retry_on_403:
-                print(f"403 encountered, attempt {attempt + 1}/{max_retries + 1}")
+                print(f"[403] attempt {attempt + 1}/{max_retries + 1}")
+                # 标记 CF 凭据无效
+                cf_state.invalidate()
+                
                 if attempt < max_retries:
                     # 强制刷新 CF clearance
-                    cf_data = get_cf_clearance(proxy, force_refresh=True)
+                    if settings.get('cf_solver_enabled') == '1':
+                        get_cf_clearance(proxy, force_refresh=True)
                     time.sleep(retry_delay)
                     continue
             
@@ -443,6 +559,23 @@ def api_cf_test():
     if result:
         return jsonify({"success": True, "data": result})
     return jsonify({"success": False, "error": "CF Solver 调用失败"})
+
+
+# CF 状态查询
+@app.route('/api/cf-status', methods=['GET'])
+@admin_required
+def api_cf_status():
+    """获取当前 CF 状态"""
+    return jsonify(cf_state.get_status())
+
+
+# CF 状态清除
+@app.route('/api/cf-clear', methods=['POST'])
+@admin_required
+def api_cf_clear():
+    """清除 CF 凭据"""
+    cf_state.clear()
+    return jsonify({"success": True})
 
 
 if __name__ == '__main__':

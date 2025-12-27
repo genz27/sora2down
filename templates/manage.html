@@ -263,8 +263,23 @@
             <div class="card">
                 <div class="card-header">
                     <span class="card-title">CF Turnstile 挑战解决</span>
-                    <button class="btn btn-outline btn-sm" onclick="testCfSolver()">测试连接</button>
+                    <div class="action-btns">
+                        <button class="btn btn-outline btn-sm" onclick="loadCfStatus()">刷新状态</button>
+                        <button class="btn btn-outline btn-sm" onclick="clearCfState()">清除凭据</button>
+                        <button class="btn btn-primary btn-sm" onclick="testCfSolver()">获取凭据</button>
+                    </div>
                 </div>
+                
+                <!-- CF 状态显示 -->
+                <div id="cfStatusCard" style="background:var(--surface-2);border-radius:8px;padding:16px;margin-bottom:20px;">
+                    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+                        <span id="cfStatusIndicator" style="width:12px;height:12px;border-radius:50%;background:#888;"></span>
+                        <span id="cfStatusText" style="font-weight:600;">未知状态</span>
+                        <span id="cfStatusExpires" style="font-size:0.8rem;color:var(--text-muted);margin-left:auto;"></span>
+                    </div>
+                    <div id="cfStatusDetails" style="font-size:0.8rem;color:var(--text-muted);font-family:monospace;"></div>
+                </div>
+                
                 <div class="settings-grid">
                     <div class="setting-item">
                         <label class="switch-label">
@@ -557,6 +572,7 @@
         loadProxies();
         loadLogs();
         loadSettings();
+        loadCfStatus();
 
         // ========== 设置管理 ==========
         function updateSwitchStatus(id, checked) {
@@ -608,17 +624,61 @@
         }
 
         function testCfSolver() {
-            showToast('正在测试...', '');
+            showToast('正在获取 CF 凭据...', '');
             fetch('/api/cf-test', { method: 'POST' })
                 .then(r => r.json())
                 .then(data => {
                     if (data.success) {
-                        showToast('CF Solver 连接成功!', 'success');
+                        showToast('CF 凭据获取成功!', 'success');
+                        loadCfStatus();
                     } else {
-                        showToast('CF Solver 连接失败: ' + (data.error || '未知错误'), 'error');
+                        showToast('CF Solver 调用失败: ' + (data.error || '未知错误'), 'error');
                     }
                 })
                 .catch(() => showToast('请求失败', 'error'));
+        }
+
+        function loadCfStatus() {
+            fetch('/api/cf-status').then(r => r.json()).then(status => {
+                const indicator = document.getElementById('cfStatusIndicator');
+                const text = document.getElementById('cfStatusText');
+                const expires = document.getElementById('cfStatusExpires');
+                const details = document.getElementById('cfStatusDetails');
+                
+                if (status.is_valid) {
+                    indicator.style.background = 'var(--success)';
+                    indicator.style.boxShadow = '0 0 8px var(--success)';
+                    text.textContent = '凭据有效';
+                    text.style.color = 'var(--success)';
+                    expires.textContent = `剩余 ${status.expires_in_seconds} 秒`;
+                } else if (status.has_clearance) {
+                    indicator.style.background = 'var(--warning)';
+                    indicator.style.boxShadow = '0 0 8px var(--warning)';
+                    text.textContent = '凭据已过期';
+                    text.style.color = 'var(--warning)';
+                    expires.textContent = '';
+                } else {
+                    indicator.style.background = '#888';
+                    indicator.style.boxShadow = 'none';
+                    text.textContent = '无凭据';
+                    text.style.color = 'var(--text-muted)';
+                    expires.textContent = '';
+                }
+                
+                if (status.user_agent) {
+                    details.textContent = 'UA: ' + status.user_agent;
+                } else {
+                    details.textContent = '尚未获取 CF 凭据';
+                }
+            });
+        }
+
+        function clearCfState() {
+            fetch('/api/cf-clear', { method: 'POST' })
+                .then(() => {
+                    showToast('CF 凭据已清除', 'success');
+                    loadCfStatus();
+                });
         }
 
         function showToast(msg, type) {
