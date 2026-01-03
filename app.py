@@ -211,7 +211,7 @@ def solve_cf_challenge(proxy=None):
     solver_url = settings.get('cf_solver_url', 'http://localhost:8000/v1/challenge')
     
     try:
-        params = {'url': 'https://sora.chatgpt.com'}
+        params = {'url': 'https://sora.chatgpt.com', 'skip_cache': 'true'}
         if proxy:
             params['proxy'] = proxy.get('proxy_url') if isinstance(proxy, dict) else proxy
         
