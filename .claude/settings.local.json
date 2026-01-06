@@ -6,7 +6,8 @@
       "Bash(git push:*)",
       "WebFetch(domain:github.com)",
       "WebSearch",
-      "Bash(git commit -m \"$\\(cat <<''EOF''\ndocs: update README with deployment guide and credits\n\n- Add detailed deployment instructions \\(Docker, Docker Compose, local\\)\n- Add configuration and usage documentation\n- Credit original author tibbar213/sora-downloader\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n\\)\")"
+      "Bash(git commit -m \"$\\(cat <<''EOF''\ndocs: update README with deployment guide and credits\n\n- Add detailed deployment instructions \\(Docker, Docker Compose, local\\)\n- Add configuration and usage documentation\n- Credit original author tibbar213/sora-downloader\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfix: add skip_cache=true param to CF challenge request\n\n确保每次请求 CF Solver 时跳过缓存获取最新的 cf_clearance\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   }
 }

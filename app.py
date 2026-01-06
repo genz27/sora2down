@@ -583,6 +583,13 @@ def api_get_logs():
     return jsonify(db.get_recent_logs(100))
 
 
+# 统计
+@app.route('/api/stats', methods=['GET'])
+@admin_required
+def api_get_stats():
+    return jsonify(db.get_stats())
+
+
 # CF Solver 测试
 @app.route('/api/cf-test', methods=['POST'])
 @admin_required

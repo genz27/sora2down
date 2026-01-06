@@ -540,13 +540,15 @@
         }
 
         // ========== 日志 ==========
+        function loadStats() {
+            fetch('/api/stats').then(r => r.json()).then(stats => {
+                document.getElementById('statRequests').textContent = stats.total;
+                document.getElementById('statSuccess').textContent = stats.total > 0 ? Math.round(stats.success/stats.total*100) + '%' : '0%';
+            });
+        }
+
         function loadLogs() {
             fetch('/api/logs').then(r => r.json()).then(logs => {
-                let total = logs.length;
-                let success = logs.filter(l => l.success).length;
-                document.getElementById('statRequests').textContent = total;
-                document.getElementById('statSuccess').textContent = total > 0 ? Math.round(success/total*100) + '%' : '0%';
-                
                 if (logs.length === 0) {
                     document.getElementById('logsTable').innerHTML = '<div class="empty-state"><p>暂无日志</p></div>';
                     return;
@@ -570,6 +572,7 @@
         // 初始化加载
         loadAccounts();
         loadProxies();
+        loadStats();
         loadLogs();
         loadSettings();
         loadCfStatus();

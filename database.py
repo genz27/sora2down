@@ -305,5 +305,13 @@ def get_recent_logs(limit=100):
     conn.close()
     return [dict(l) for l in logs]
 
+def get_stats():
+    """获取统计数据"""
+    conn = get_db()
+    total = conn.execute('SELECT COUNT(*) as cnt FROM request_logs').fetchone()['cnt']
+    success = conn.execute('SELECT COUNT(*) as cnt FROM request_logs WHERE success=1').fetchone()['cnt']
+    conn.close()
+    return {'total': total, 'success': success}
+
 # 初始化
 init_db()
