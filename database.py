@@ -284,24 +284,39 @@ def load_proxies_from_file():
                 count += 1
     return count
 
-def normalize_proxy(proxy_str):
-    """标准化代理格式"""
+def normalize_proxy(proxy_str, default_scheme='http'):
+    """标准化代理格式
+    
+    支持的格式：
+    - 完整URL: http://user:pass@host:port, https://..., socks5://..., socks5h://..., socks4://...
+    - 简单格式: host:port (会添加 default_scheme 前缀)
+    - 四段格式: host:port:user:pass (会添加 default_scheme 前缀)
+    
+    Args:
+        proxy_str: 代理字符串
+        default_scheme: 无协议时的默认协议，默认 'http'
+    """
     proxy_str = proxy_str.strip()
     if not proxy_str:
         return None
     
-    # 已经是完整格式
-    if proxy_str.startswith(('http://', 'https://', 'socks5://', 'socks4://')):
+    # 支持的协议前缀
+    supported_schemes = ('http://', 'https://', 'socks5://', 'socks5h://', 'socks4://')
+    
+    # 已经是完整格式，直接返回
+    if proxy_str.startswith(supported_schemes):
         return proxy_str
     
-    # ip:port 格式
+    # 无协议的格式，需要添加前缀
     if ':' in proxy_str:
         parts = proxy_str.split(':')
         if len(parts) == 2:
-            return f'http://{proxy_str}'
+            # host:port 格式
+            return f'{default_scheme}://{proxy_str}'
         elif len(parts) == 4:
-            # ip:port:user:pass 格式
-            return f'http://{parts[2]}:{parts[3]}@{parts[0]}:{parts[1]}'
+            # host:port:user:pass 格式
+            host, port, user, password = parts
+            return f'{default_scheme}://{user}:{password}@{host}:{port}'
     
     return None
 
