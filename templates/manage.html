@@ -697,14 +697,6 @@
                     loadProxies();
                 });
         }
-            const toast = document.getElementById('toast');
-            toast.textContent = msg;
-            toast.className = 'toast show ' + type;
-            setTimeout(() => toast.classList.remove('show'), 3000);
-        }
-    </script>
-</body>
-</html>
 
         function showToast(msg, type) {
             const toast = document.getElementById('toast');
