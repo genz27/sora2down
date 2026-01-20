@@ -356,17 +356,36 @@
             <div class="card">
                 <div class="card-header">
                     <span class="card-title">代理池</span>
-                    <div class="action-btns">
-                        <button class="btn btn-outline btn-sm" onclick="reloadProxies()">从文件重载</button>
-                        <button class="btn btn-primary btn-sm" onclick="showAddProxyModal()">+ 添加代理</button>
-                    </div>
+                    <button class="btn btn-primary btn-sm" onclick="saveAllProxies()">保存代理</button>
                 </div>
-                <div id="proxiesTable"></div>
+                <div class="form-group">
+                    <label>代理列表 (每行一个，支持格式: ip:port:user:pass 或 http://user:pass@ip:port)</label>
+                    <textarea id="allProxies" style="min-height:300px;font-family:var(--font-mono);font-size:0.85rem;" placeholder="142.111.208.143:7107:user:pass&#10;http://user:pass@195.172.150.43:5727&#10;socks5://127.0.0.1:1080"></textarea>
+                </div>
+                <p class="setting-desc">修改后点击"保存代理"生效，会清空旧代理并导入新列表</p>
             </div>
         </div>
 
         <!-- 系统设置 -->
         <div class="panel" id="panel-settings">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">安全设置</span>
+                </div>
+                <div class="settings-grid">
+                    <div class="setting-item">
+                        <label>管理员密码</label>
+                        <input type="password" id="setting_admin_password" placeholder="留空则使用默认密码" onchange="saveSettings()">
+                        <p class="setting-desc">用于登录管理后台</p>
+                    </div>
+                    <div class="setting-item">
+                        <label>API 访问令牌</label>
+                        <input type="text" id="setting_api_token" placeholder="留空则不需要令牌" onchange="saveSettings()">
+                        <p class="setting-desc">调用 /get-sora-link 接口时需要的 token</p>
+                    </div>
+                </div>
+            </div>
+
             <div class="card">
                 <div class="card-header">
                     <span class="card-title">代理设置</span>
@@ -478,21 +497,6 @@
         </div>
     </div>
 
-    <!-- 添加代理弹窗 -->
-    <div class="modal-overlay" id="proxyModal">
-        <div class="modal">
-            <h2>添加代理</h2>
-            <div class="form-group">
-                <label>代理地址 (每行一个)</label>
-                <textarea id="proxyUrls" placeholder="http://127.0.0.1:7890&#10;http://user:pass@proxy.com:8080&#10;socks5://127.0.0.1:1080" style="min-height:150px;"></textarea>
-            </div>
-            <div class="modal-actions">
-                <button class="btn btn-outline" onclick="closeModal('proxyModal')">取消</button>
-                <button class="btn btn-primary" onclick="saveProxies()">添加</button>
-            </div>
-        </div>
-    </div>
-
     <script>
         // Tab切换
         document.querySelectorAll('.tab').forEach(tab => {
@@ -585,55 +589,25 @@
         }
 
         // ========== 代理管理 ==========
-        function showAddProxyModal() {
-            document.getElementById('proxyUrls').value = '';
-            document.getElementById('proxyModal').classList.add('show');
-        }
-
-        function saveProxies() {
-            const urls = document.getElementById('proxyUrls').value.split('\n').map(u => u.trim()).filter(u => u);
-            Promise.all(urls.map(url => 
-                fetch('/api/proxies', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ proxy_url: url }) })
-            )).then(() => { closeModal('proxyModal'); loadProxies(); });
-        }
-
-        function toggleProxy(id, enabled) {
-            fetch('/api/proxies/' + id, {
-                method: 'PUT',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ enabled: enabled ? 0 : 1 })
-            }).then(() => loadProxies());
-        }
-
-        function deleteProxy(id) {
-            if (confirm('确定删除此代理？')) {
-                fetch('/api/proxies/' + id, { method: 'DELETE' }).then(() => loadProxies());
-            }
-        }
-
         function loadProxies() {
             fetch('/api/proxies').then(r => r.json()).then(proxies => {
                 document.getElementById('statProxies').textContent = proxies.length;
-                if (proxies.length === 0) {
-                    document.getElementById('proxiesTable').innerHTML = '<div class="empty-state"><p>暂无代理</p><button class="btn btn-primary" onclick="showAddProxyModal()">添加代理</button></div>';
-                    return;
-                }
-                let html = '<table><thead><tr><th>代理地址</th><th>成功/失败</th><th>最后使用</th><th>状态</th><th>操作</th></tr></thead><tbody>';
-                proxies.forEach(p => {
-                    html += `<tr>
-                        <td style="font-family:monospace;font-size:0.85rem;">${p.proxy_url}</td>
-                        <td>${p.success_count} / ${p.fail_count}</td>
-                        <td style="font-size:0.8rem;color:var(--text-muted);">${p.last_used_at || '-'}</td>
-                        <td><span class="status-badge ${p.enabled ? 'status-enabled' : 'status-disabled'}">${p.enabled ? '启用' : '禁用'}</span></td>
-                        <td class="action-btns">
-                            <button class="btn btn-outline btn-sm" onclick="toggleProxy(${p.id}, ${p.enabled})">${p.enabled ? '禁用' : '启用'}</button>
-                            <button class="btn btn-danger btn-sm" onclick="deleteProxy(${p.id})">删除</button>
-                        </td>
-                    </tr>`;
-                });
-                html += '</tbody></table>';
-                document.getElementById('proxiesTable').innerHTML = html;
+                // 显示原始格式的代理列表
+                const lines = proxies.map(p => p.proxy_url).join('\n');
+                document.getElementById('allProxies').value = lines;
             });
+        }
+
+        function saveAllProxies() {
+            const lines = document.getElementById('allProxies').value.split('\n').map(u => u.trim()).filter(u => u);
+            fetch('/api/proxies/replace', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ proxies: lines })
+            }).then(r => r.json()).then(data => {
+                showToast(`已保存 ${data.count} 个代理`, 'success');
+                loadProxies();
+            }).catch(() => showToast('保存失败', 'error'));
         }
 
         // ========== 日志 ==========
@@ -693,6 +667,8 @@
                 });
                 document.getElementById('setting_max_retries').value = settings.max_retries || '3';
                 document.getElementById('setting_retry_delay').value = settings.retry_delay || '2';
+                document.getElementById('setting_admin_password').value = settings.admin_password || '';
+                document.getElementById('setting_api_token').value = settings.api_token || '';
             });
         }
 
@@ -700,7 +676,9 @@
             const fields = ['proxy_enabled', 'proxy_pool_enabled', 'retry_on_429', 'retry_on_403'];
             const data = {
                 max_retries: document.getElementById('setting_max_retries').value,
-                retry_delay: document.getElementById('setting_retry_delay').value
+                retry_delay: document.getElementById('setting_retry_delay').value,
+                admin_password: document.getElementById('setting_admin_password').value,
+                api_token: document.getElementById('setting_api_token').value
             };
             fields.forEach(f => {
                 const checked = document.getElementById('setting_' + f).checked;
@@ -719,6 +697,14 @@
                     loadProxies();
                 });
         }
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.className = 'toast show ' + type;
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+    </script>
+</body>
+</html>
 
         function showToast(msg, type) {
             const toast = document.getElementById('toast');

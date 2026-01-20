@@ -81,6 +81,8 @@ def init_db():
         ('retry_on_403', '1'),
         ('max_retries', '3'),
         ('retry_delay', '2'),
+        ('admin_password', 'admin123'),
+        ('api_token', ''),
     ]
     for key, value in default_settings:
         cursor.execute('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)', (key, value))
@@ -169,6 +171,10 @@ def get_enabled_proxies():
     return [dict(p) for p in proxies]
 
 def add_proxy(proxy_url):
+    # 标准化代理格式
+    proxy_url = normalize_proxy(proxy_url)
+    if not proxy_url:
+        return False
     conn = get_db()
     try:
         conn.execute('INSERT INTO proxies (proxy_url) VALUES (?)', (proxy_url,))
@@ -178,6 +184,24 @@ def add_proxy(proxy_url):
         return False
     finally:
         conn.close()
+
+
+def replace_all_proxies(proxy_list):
+    """清空并替换所有代理"""
+    conn = get_db()
+    conn.execute('DELETE FROM proxies')
+    count = 0
+    for proxy_str in proxy_list:
+        proxy_url = normalize_proxy(proxy_str)
+        if proxy_url:
+            try:
+                conn.execute('INSERT INTO proxies (proxy_url) VALUES (?)', (proxy_url,))
+                count += 1
+            except sqlite3.IntegrityError:
+                pass  # 重复的跳过
+    conn.commit()
+    conn.close()
+    return count
 
 def update_proxy(proxy_id, **kwargs):
     conn = get_db()

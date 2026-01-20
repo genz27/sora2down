@@ -12,10 +12,6 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'sora-studio-pro-secret-key-2024')
 
-# 配置
-APP_ACCESS_TOKEN = os.getenv('APP_ACCESS_TOKEN')
-ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'admin123')
-
 # 轮询索引
 account_index = 0
 proxy_index = 0
@@ -47,6 +43,18 @@ def invalidate_settings_cache():
     """清除设置缓存"""
     _settings_cache['data'] = None
     _settings_cache['expires'] = 0
+
+
+def get_admin_password():
+    """获取管理员密码"""
+    settings = get_settings()
+    return settings.get('admin_password') or os.getenv('ADMIN_PASSWORD', 'admin123')
+
+
+def get_api_token():
+    """获取 API 访问令牌"""
+    settings = get_settings()
+    return settings.get('api_token') or os.getenv('APP_ACCESS_TOKEN') or ''
 
 
 def get_next_account():
@@ -102,7 +110,8 @@ def _trim_sessions(sessions):
         sessions.pop(key, None)
 
 
-def get_http_session(proxy=None):
+def get_http_session(proxy=None, timeout=15):
+    """获取 HTTP Session，带连接超时控制"""
     proxy_url = proxy.get('proxy_url') if isinstance(proxy, dict) else proxy
     key = proxy_url or 'direct'
     sessions = getattr(_thread_local, 'sessions', None)
@@ -119,7 +128,8 @@ def get_http_session(proxy=None):
     if proxy_url:
         proxies = {"http": proxy_url, "https": proxy_url}
 
-    sess = Session(impersonate="chrome110", proxies=proxies)
+    # 设置连接超时，避免代理连接卡住
+    sess = Session(impersonate="chrome110", proxies=proxies, timeout=timeout)
     sessions[key] = {'session': sess, 'last_used': time.time()}
     _trim_sessions(sessions)
     return sess
@@ -251,7 +261,8 @@ def process_sora_request(video_id, account, proxy, proxy_id):
 # ========== 页面路由 ==========
 @app.route('/')
 def index():
-    auth_required = APP_ACCESS_TOKEN is not None and APP_ACCESS_TOKEN != ""
+    api_token = get_api_token()
+    auth_required = bool(api_token)
     return render_template('index.html', auth_required=auth_required)
 
 
@@ -259,7 +270,7 @@ def index():
 def login():
     if request.method == 'POST':
         password = request.form.get('password')
-        if password == ADMIN_PASSWORD:
+        if password == get_admin_password():
             session['admin_logged_in'] = True
             return redirect(url_for('manage'))
         return render_template('login.html', error='密码错误')
@@ -286,8 +297,9 @@ def get_sora_link():
     if not account:
         return jsonify({"error": "没有可用的 Sora 账号，请在管理后台添加。"}), 500
 
-    if APP_ACCESS_TOKEN:
-        if request.json.get('token') != APP_ACCESS_TOKEN:
+    api_token = get_api_token()
+    if api_token:
+        if request.json.get('token') != api_token:
             return jsonify({"error": "无效或缺失的访问令牌。"}), 401
 
     sora_url = request.json.get('url')
@@ -408,6 +420,17 @@ def api_delete_proxy(proxy_id):
     db.delete_proxy(proxy_id)
     invalidate_proxies_cache()
     return jsonify({"success": True})
+
+
+@app.route('/api/proxies/replace', methods=['POST'])
+@admin_required
+def api_replace_proxies():
+    """替换所有代理"""
+    data = request.json
+    proxies = data.get('proxies', [])
+    count = db.replace_all_proxies(proxies)
+    invalidate_proxies_cache()
+    return jsonify({"success": True, "count": count})
 
 
 @app.route('/api/proxies/reload', methods=['POST'])
