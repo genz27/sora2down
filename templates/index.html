@@ -380,24 +380,43 @@
             gallery.insertBefore(d, gallery.firstChild);
         }
 
+        const MAX_RETRIES = 3;
+
         async function processUrl(url, id) {
             const c = document.getElementById(id);
             const token = accessTokenInput ? accessTokenInput.value : null;
-            try {
-                const r = await fetch('/get-sora-link', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: url, token: token })
-                });
-                if (r.status === 401) throw new Error('访问令牌错误或无效');
-                if (r.status === 403) throw new Error("非法请求拒绝访问");
-                const d = await r.json();
-                if (d.download_link) {
-                    renderSuccess(c, d.download_link);
-                    successList.push({ originalUrl: url, downloadLink: d.download_link });
-                    updateBatchBar();
-                } else throw new Error(d.error || "无效链接");
-            } catch (e) { renderError(c, e.message); }
+            let lastError = null;
+
+            for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+                try {
+                    if (attempt > 1) {
+                        c.querySelector('.card-meta span:last-child').innerText = `重试中 (${attempt}/${MAX_RETRIES})...`;
+                    }
+                    const r = await fetch('/get-sora-link', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url: url, token: token })
+                    });
+                    if (r.status === 401) throw new Error('访问令牌错误或无效');
+                    if (r.status === 403) throw new Error("非法请求拒绝访问");
+                    const d = await r.json();
+                    if (d.download_link) {
+                        renderSuccess(c, d.download_link);
+                        successList.push({ originalUrl: url, downloadLink: d.download_link });
+                        updateBatchBar();
+                        return; // 成功，退出
+                    } else {
+                        throw new Error(d.error || "无效链接");
+                    }
+                } catch (e) {
+                    lastError = e.message;
+                    // 401/403 不重试
+                    if (e.message.includes('令牌') || e.message.includes('拒绝')) break;
+                    // 最后一次重试前等待
+                    if (attempt < MAX_RETRIES) await new Promise(r => setTimeout(r, 1000 * attempt));
+                }
+            }
+            renderError(c, lastError);
         }
 
         function renderSuccess(c, l) {
